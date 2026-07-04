@@ -1,0 +1,6 @@
+{
+  "name": "Prescriber",
+  "description": "A comprehensive Medical Prescription, Commission, and Payment Management App for doctors and administrators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
