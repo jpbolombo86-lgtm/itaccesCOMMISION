@@ -212,6 +212,7 @@ fun PrescriptionAppMainScreen(
                         DoctorDashboardView(
                             doctor = currentDoctor,
                             prescriptions = prescriptions,
+                            commissions = commissions,
                             payments = payments,
                             wallet = currentDoctorWallet,
                             onNavigateTo = { currentDest = it }
@@ -529,6 +530,14 @@ fun AdminDashboardView(
         }
 
         item {
+            MonthlyFinancialBarChart(
+                payments = payments,
+                commissions = commissions,
+                title = "Suivi Financier Global"
+            )
+        }
+
+        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -671,6 +680,7 @@ fun DashboardMetricCard(
 fun DoctorDashboardView(
     doctor: DoctorEntity?,
     prescriptions: List<FullPrescription>,
+    commissions: List<FullCommission>,
     payments: List<FullPayment>,
     wallet: FullWallet?,
     onNavigateTo: (NavigationDest) -> Unit
@@ -861,6 +871,14 @@ fun DoctorDashboardView(
                     onClick = { onNavigateTo(NavigationDest.WALLET) }
                 )
             }
+        }
+
+        item {
+            MonthlyFinancialBarChart(
+                payments = payments,
+                commissions = commissions,
+                title = "Mon Suivi Financier"
+            )
         }
 
         item {
@@ -2676,3 +2694,274 @@ fun LoginScreen(
         }
     }
 }
+
+@Composable
+fun MonthlyFinancialBarChart(
+    payments: List<FullPayment>,
+    commissions: List<FullCommission>,
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    val monthsToDisplay = remember {
+        val cal = java.util.Calendar.getInstance()
+        val sdfKey = java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.getDefault())
+        val sdfLabel = java.text.SimpleDateFormat("MMM yy", java.util.Locale.getDefault())
+        val list = mutableListOf<Pair<String, String>>()
+        for (i in 0..3) {
+            val date = cal.time
+            val key = sdfKey.format(date)
+            var label = sdfLabel.format(date)
+            label = label
+                .replace("Jan", "Janv.")
+                .replace("Feb", "Févr.")
+                .replace("Mar", "Mars")
+                .replace("Apr", "Avril")
+                .replace("May", "Mai")
+                .replace("Jun", "Juin")
+                .replace("Jul", "Juil.")
+                .replace("Aug", "Août")
+                .replace("Sep", "Sept.")
+                .replace("Oct", "Oct.")
+                .replace("Nov", "Nov.")
+                .replace("Dec", "Déc.")
+            list.add(0, Pair(key, label))
+            cal.add(java.util.Calendar.MONTH, -1)
+        }
+        list
+    }
+
+    val monthlyData = remember(payments, commissions, monthsToDisplay) {
+        monthsToDisplay.map { (key, label) ->
+            val paidAmount = payments
+                .filter { it.entity.paymentDate.startsWith(key) }
+                .sumOf { it.entity.amount }
+
+            val pendingAmount = commissions
+                .filter { 
+                    it.entity.status == "PENDING" && 
+                    (it.prescription?.prescriptionDate?.startsWith(key) == true || 
+                     (it.prescription == null && java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.getDefault()).format(java.util.Date(it.entity.createdAt)) == key))
+                }
+                .sumOf { it.entity.commissionAmount }
+
+            MonthlyStat(key, label, paidAmount, pendingAmount)
+        }
+    }
+
+    val maxVal = remember(monthlyData) {
+        val highest = monthlyData.maxOfOrNull { maxOf(it.paidAmount, it.pendingAmount) } ?: 0.0
+        if (highest <= 0.0) 100.0 else highest * 1.15
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("financial_bar_chart"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Versements payés vs commissions en attente",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                Icon(
+                    imageVector = Icons.Default.TrendingUp,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    repeat(4) { index ->
+                        val gridValue = maxVal * (3 - index) / 3
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "$${String.format("%.0f", gridValue)}",
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.width(36.dp)
+                            )
+                            Divider(
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 40.dp, end = 8.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    monthlyData.forEach { stat ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Bottom,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.Bottom,
+                                modifier = Modifier.weight(1f, fill = false)
+                            ) {
+                                val paidHeightPct = (stat.paidAmount / maxVal).toFloat().coerceIn(0f, 1f)
+                                val animatedPaidHeightPct by androidx.compose.animation.core.animateFloatAsState(
+                                    targetValue = paidHeightPct,
+                                    animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 150f),
+                                    label = "paid_height"
+                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Bottom
+                                ) {
+                                    if (stat.paidAmount > 0) {
+                                        Text(
+                                            text = "$${String.format("%.0f", stat.paidAmount)}",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF2E7D32)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(18.dp)
+                                            .fillMaxHeight(animatedPaidHeightPct.coerceAtLeast(0.01f))
+                                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(Color(0xFF81C784), Color(0xFF2E7D32))
+                                                )
+                                            )
+                                    )
+                                }
+
+                                val pendingHeightPct = (stat.pendingAmount / maxVal).toFloat().coerceIn(0f, 1f)
+                                val animatedPendingHeightPct by androidx.compose.animation.core.animateFloatAsState(
+                                    targetValue = pendingHeightPct,
+                                    animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 150f),
+                                    label = "pending_height"
+                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Bottom
+                                ) {
+                                    if (stat.pendingAmount > 0) {
+                                        Text(
+                                            text = "$${String.format("%.0f", stat.pendingAmount)}",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFE65100)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(18.dp)
+                                            .fillMaxHeight(animatedPendingHeightPct.coerceAtLeast(0.01f))
+                                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(Color(0xFFFFB74D), Color(0xFFE65100))
+                                                )
+                                            )
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            Text(
+                                text = stat.label,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFF2E7D32))
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Versements reçus",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Spacer(modifier = Modifier.width(24.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFFE65100))
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Commissions en attente",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+data class MonthlyStat(
+    val key: String,
+    val label: String,
+    val paidAmount: Double,
+    val pendingAmount: Double
+)

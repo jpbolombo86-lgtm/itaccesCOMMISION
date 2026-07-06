@@ -1,0 +1,40 @@
+Agis en tant que développeur Android expert spécialisé en Kotlin et Jetpack Compose. Je souhaite que tu recrées de zéro une application de gestion de prescriptions médicales et de commissions financières.
+
+Voici le cahier des charges détaillé et l'architecture exacte que tu dois implémenter :
+
+### 1. Stack et Architecture
+- Android Natif, Kotlin, Gradle (KTS).
+- Interface 100% en Jetpack Compose (Material Design 3).
+- Architecture MVVM + Repository Pattern.
+- Base de données locale offline-first avec Room Database.
+- Utilisation de StateFlow et Coroutines pour l'asynchronisme.
+
+### 2. Schéma de la Base de données (Room)
+Tu dois créer 6 entités :
+1. **DoctorEntity** : id, name, specialization, phone, email, createdAt.
+2. **PrescriptionEntity** : id, doctorId, patientName, patientAge, prescriptionDate, notes, diagnosis, status (PENDING, VALIDATED).
+3. **MedicationEntity** : id, prescriptionId, name, dosage, frequency, duration, quantity.
+4. **CommissionEntity** : id, prescriptionId (nullable), doctorId, commissionAmount, status (PENDING, PAID), createdAt.
+5. **WalletEntity** : id, doctorId, balance, totalEarned, totalWithdrawn, updatedAt.
+6. **PaymentEntity** : id, doctorId, amount, paymentDate, reference, status, createdAt.
+
+Créé également les relations (ex: `FullPrescription` avec @Relation sur MedicationEntity, et `FullDoctor`).
+
+### 3. Logique Métier dans le ViewModel
+- **Génération de commission** : Quand une prescription passe de PENDING à VALIDATED, crée automatiquement une `CommissionEntity` pour le médecin, et ajoute ce montant au `balance` et `totalEarned` de son `WalletEntity`.
+- **Enregistrement de paiement** : Quand un paiement est créé pour un médecin, déduis l'argent du `balance` de son Wallet, ajoute-le à son `totalWithdrawn`, et passe le statut de ses commissions en attente à PAID.
+
+### 4. Interface Utilisateur (Navigation et Écrans)
+1. **Écran de sélection de rôle** : L'utilisateur choisit entre "Administrateur" et "Médecin" (en sélectionnant son nom dans une liste).
+2. **Tableau de Bord Admin** :
+   - Vue globale des statistiques.
+   - Formulaire d'ajout de médecin.
+   - Liste des prescriptions avec un bouton "Valider" (pour générer la commission).
+   - Module pour effectuer un paiement (PaymentEntity) à un médecin.
+3. **Tableau de Bord Médecin** :
+   - Graphique Financier Mensuel (`MonthlyFinancialBarChart`) : Un diagramme à barres (fait maison avec Box/Canvas) comparant les Versements Reçus (Vert) et les Commissions en attente (Orange) pour les 4 derniers mois.
+   - Portefeuille (Solde actuel, total gagné, total retiré).
+   - Bouton "Nouvelle Prescription" menant vers un formulaire complet avec des champs dynamiques (pour ajouter plusieurs médicaments).
+   - Liste de l'historique de ses prescriptions avec leurs statuts.
+
+Commence par générer la couche Données (Entities, DAO, Database), puis le ViewModel, puis les écrans Compose. Je compte sur toi pour que l'UI soit très soignée (Card, icônes, animations fluides).
